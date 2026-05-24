@@ -1,246 +1,294 @@
 name: PR Build Check
-
-on:
+'on':
   pull_request_target:
-    types: [opened, synchronize, reopened]
+    types:
+    - opened
+    - synchronize
+    - reopened
 jobs:
   pre-commit:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-      - uses: actions/setup-python@v3
-        with:
-          python-version: "3.8"
-          cache: "pip"
-      - uses: pre-commit/action@v3.0.0
+    - uses: actions/checkout@v3
+      with:
+        ref: ${{ github.event.pull_request.head.sha }}
+    - uses: actions/setup-python@v3
+      with:
+        python-version: '3.8'
+        cache: pip
+    - uses: pre-commit/action@v3.0.0
   crud-unit-tests:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-      - name: Checkout submodules
-        run: git submodule update --init --recursive qtag
-      - uses: actions/setup-python@v3
-        with:
-          python-version: "3.8"
-          cache: "pip"
-      - name: Install all dependencies
-        run: |
-          pip install poetry
-          poetry config virtualenvs.in-project true
-          poetry install
-      - name: Show dependencies
-        run: poetry show
-      - name: Run CRUD unit tests
-        run: poetry run python -m pytest app/crud -rP
+    - uses: actions/checkout@v3
+      with:
+        ref: ${{ github.event.pull_request.head.sha }}
+    - name: Checkout submodules
+      run: git submodule update --init --recursive qtag
+    - uses: actions/setup-python@v3
+      with:
+        python-version: '3.8'
+        cache: pip
+    - name: Install all dependencies
+      run: 'pip install poetry
+
+        poetry config virtualenvs.in-project true
+
+        poetry install
+
+        '
+    - name: Show dependencies
+      run: poetry show
+    - name: Run CRUD unit tests
+      run: poetry run python -m pytest app/crud -rP
   devdeploy-with-materialization:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-      - name: Checkout submodules
-        run: git submodule update --init --recursive qtag
-      - uses: actions/setup-python@v3
-        with:
-          python-version: "3.8"
-          cache: "pip"
-      - name: Install all dependencies
-        run: |
-          pip install poetry
-          poetry config virtualenvs.in-project true
-          poetry install
-      - name: Show dependencies
-        run: poetry show
-      - name: Make unique names for this job
-        id: shell-command
-        run: |
-          SUFFIX=$(echo ${GITHUB_HEAD_REF} | sed "s/\./_/g" | sed "s/-/_/g" | sed "s\/\_\g")_${GITHUB_RUN_ID}
-          echo "OPSCENTER_DATABASE=OPSCENTER_PR_$SUFFIX" >> $GITHUB_ENV
-      - name: Make snowsql config
-        env:
-          # Also uses OPSCENTER_DATABASE from above
-          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
-          SNOWFLAKE_USERNAME: ${{ secrets.SNOWFLAKE_USERNAME }}
-          SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
-        run: |
-          mkdir $HOME/.snowsql
-          envsubst < deploy/opscenter.config > $HOME/.snowsql/config
-      - name: Run deploy/devdeploy.py
-        run: poetry run python deploy/devdeploy.py --profile opscenter
+    - uses: actions/checkout@v3
+      with:
+        ref: ${{ github.event.pull_request.head.sha }}
+    - name: Checkout submodules
+      run: git submodule update --init --recursive qtag
+    - uses: actions/setup-python@v3
+      with:
+        python-version: '3.8'
+        cache: pip
+    - name: Install all dependencies
+      run: 'pip install poetry
+
+        poetry config virtualenvs.in-project true
+
+        poetry install
+
+        '
+    - name: Show dependencies
+      run: poetry show
+    - name: Make unique names for this job
+      id: shell-command
+      run: 'SUFFIX=$(echo ${GITHUB_HEAD_REF} | sed "s/\./_/g" | sed "s/-/_/g" | sed
+        "s\/\_\g")_${GITHUB_RUN_ID}
+
+        echo "OPSCENTER_DATABASE=OPSCENTER_PR_$SUFFIX" >> $GITHUB_ENV
+
+        '
+    - name: Make snowsql config
+      env:
+        SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+        SNOWFLAKE_USERNAME: ${{ secrets.SNOWFLAKE_USERNAME }}
+        SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
+      run: 'mkdir $HOME/.snowsql
+
+        envsubst < deploy/opscenter.config > $HOME/.snowsql/config
+
+        '
+    - name: Run deploy/devdeploy.py
+      run: poetry run python deploy/devdeploy.py --profile opscenter
   unit-tests:
     runs-on: ubuntu-latest
     if: ${{ always() }}
-    needs: [devdeploy-with-materialization, cypress-tests]
+    needs:
+    - devdeploy-with-materialization
+    - cypress-tests
     steps:
-      - uses: actions/checkout@v3
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-      - name: Checkout submodules
-        run: git submodule update --init --recursive qtag
-      - uses: actions/setup-python@v3
-        with:
-          python-version: "3.8"
-          cache: "pip"
-      - name: Install all dependencies
-        run: |
-          pip install poetry
-          poetry config virtualenvs.in-project true
-          poetry install
-      - name: Make unique names for this job
-        id: shell-command
-        run: |
-          SUFFIX=$(echo ${GITHUB_HEAD_REF} | sed "s/\./_/g" | sed "s/-/_/g" | sed "s\/\_\g")_${GITHUB_RUN_ID}
-          echo "OPSCENTER_DATABASE=OPSCENTER_PR_$SUFFIX" >> $GITHUB_ENV
-      - name: Make snowsql config
-        env:
-          # Also uses OPSCENTER_DATABASE from above
-          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
-          SNOWFLAKE_USERNAME: ${{ secrets.SNOWFLAKE_USERNAME }}
-          SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
-        run: |
-          mkdir $HOME/.snowsql
-          envsubst < deploy/opscenter.config > $HOME/.snowsql/config
-      - name: Run pytests
-        run: cd test && poetry run python -m pytest unit --profile opscenter
+    - uses: actions/checkout@v3
+      with:
+        ref: ${{ github.event.pull_request.head.sha }}
+    - name: Checkout submodules
+      run: git submodule update --init --recursive qtag
+    - uses: actions/setup-python@v3
+      with:
+        python-version: '3.8'
+        cache: pip
+    - name: Install all dependencies
+      run: 'pip install poetry
+
+        poetry config virtualenvs.in-project true
+
+        poetry install
+
+        '
+    - name: Make unique names for this job
+      id: shell-command
+      run: 'SUFFIX=$(echo ${GITHUB_HEAD_REF} | sed "s/\./_/g" | sed "s/-/_/g" | sed
+        "s\/\_\g")_${GITHUB_RUN_ID}
+
+        echo "OPSCENTER_DATABASE=OPSCENTER_PR_$SUFFIX" >> $GITHUB_ENV
+
+        '
+    - name: Make snowsql config
+      env:
+        SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+        SNOWFLAKE_USERNAME: ${{ secrets.SNOWFLAKE_USERNAME }}
+        SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
+      run: 'mkdir $HOME/.snowsql
+
+        envsubst < deploy/opscenter.config > $HOME/.snowsql/config
+
+        '
+    - name: Run pytests
+      run: cd test && poetry run python -m pytest unit --profile opscenter
   cypress-tests:
     needs: devdeploy-with-materialization
-    runs-on: ubuntu-latest-4-cores
+    runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-      - name: Checkout submodules
-        run: git submodule update --init --recursive qtag
-      - uses: actions/setup-python@v3
-        with:
-          python-version: "3.8"
-          cache: "pip"
-      - name: Install all dependencies
-        run: |
-          pip install poetry
-          poetry config virtualenvs.in-project true
-          poetry install
-      - name: Make unique names for this job
-        id: shell-command
-        run: |
-          SUFFIX=$(echo ${GITHUB_HEAD_REF} | sed "s/\./_/g" | sed "s/-/_/g" | sed "s\/\_\g")_${GITHUB_RUN_ID}
-          echo "OPSCENTER_DATABASE=OPSCENTER_PR_$SUFFIX" >> $GITHUB_ENV
-      - name: Make snowsql config
-        env:
-          # Also uses OPSCENTER_DATABASE from above
-          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
-          SNOWFLAKE_USERNAME: ${{ secrets.SNOWFLAKE_USERNAME }}
-          SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
-        run: |
-          mkdir $HOME/.snowsql
-          envsubst < deploy/opscenter.config > $HOME/.snowsql/config
-        # Hack to re-create the app/ui/crud.zip for the local streamlit
-      - name: Run deploy/devdeploy.py without materialization
-        run: poetry run python deploy/devdeploy.py --profile opscenter -s
-      - name: run streamlit
-        run: "poetry run streamlit run app/ui/Home.py --browser.gatherUsageStats false &"
-      - name: Cypress run
-        uses: cypress-io/github-action@v6
-        env:
-          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
-          SNOWFLAKE_USERNAME: ${{ secrets.SNOWFLAKE_USERNAME }}
-          SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
-        with:
-          start: yarn run cypress
-          browser: chrome
-          headless: true
-          record: false
-      - uses: actions/upload-artifact@v3
-        if: ${{ always() }}
-        with:
-          name: cypress-artifacts
-          path: |
-            cypress/videos/
-            cypress/screenshots/
+    - uses: actions/checkout@v3
+      with:
+        ref: ${{ github.event.pull_request.head.sha }}
+    - name: Checkout submodules
+      run: git submodule update --init --recursive qtag
+    - uses: actions/setup-python@v3
+      with:
+        python-version: '3.8'
+        cache: pip
+    - name: Install all dependencies
+      run: 'pip install poetry
+
+        poetry config virtualenvs.in-project true
+
+        poetry install
+
+        '
+    - name: Make unique names for this job
+      id: shell-command
+      run: 'SUFFIX=$(echo ${GITHUB_HEAD_REF} | sed "s/\./_/g" | sed "s/-/_/g" | sed
+        "s\/\_\g")_${GITHUB_RUN_ID}
+
+        echo "OPSCENTER_DATABASE=OPSCENTER_PR_$SUFFIX" >> $GITHUB_ENV
+
+        '
+    - name: Make snowsql config
+      env:
+        SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+        SNOWFLAKE_USERNAME: ${{ secrets.SNOWFLAKE_USERNAME }}
+        SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
+      run: 'mkdir $HOME/.snowsql
+
+        envsubst < deploy/opscenter.config > $HOME/.snowsql/config
+
+        '
+    - name: Run deploy/devdeploy.py without materialization
+      run: poetry run python deploy/devdeploy.py --profile opscenter -s
+    - name: run streamlit
+      run: poetry run streamlit run app/ui/Home.py --browser.gatherUsageStats false
+        &
+    - name: Cypress run
+      uses: cypress-io/github-action@v6
+      env:
+        SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+        SNOWFLAKE_USERNAME: ${{ secrets.SNOWFLAKE_USERNAME }}
+        SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
+      with:
+        start: yarn run cypress
+        browser: chrome
+        headless: true
+        record: false
+    - uses: actions/upload-artifact@v3
+      if: ${{ always() }}
+      with:
+        name: cypress-artifacts
+        path: 'cypress/videos/
+
+          cypress/screenshots/
+
+          '
   cleanup:
     runs-on: ubuntu-latest
-    needs: [unit-tests, cypress-tests]
+    needs:
+    - unit-tests
+    - cypress-tests
     if: ${{ always() }}
     steps:
-      - uses: actions/checkout@v3
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-      - name: Checkout submodules
-        run: git submodule update --init --recursive qtag
-      - uses: actions/setup-python@v3
-        with:
-          python-version: "3.8"
-          cache: "pip"
-      - name: Install all dependencies
-        run: |
-          pip install poetry
-          poetry config virtualenvs.in-project true
-          poetry install
-      - name: Make unique names for this job
-        id: shell-command
-        run: |
-          SUFFIX=$(echo ${GITHUB_HEAD_REF} | sed "s/\./_/g" | sed "s/-/_/g" | sed "s\/\_\g")_${GITHUB_RUN_ID}
-          echo "OPSCENTER_DATABASE=OPSCENTER_PR_$SUFFIX" >> $GITHUB_ENV
-      - name: Make snowsql config
-        env:
-          # Also uses OPSCENTER_DATABASE from above
-          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
-          SNOWFLAKE_USERNAME: ${{ secrets.SNOWFLAKE_USERNAME }}
-          SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
-        run: |
-          mkdir $HOME/.snowsql
-          envsubst < deploy/opscenter.config > $HOME/.snowsql/config
-      - name: remove SQL objects
-        run: "poetry run python deploy/cypress_teardown.py -p opscenter"
+    - uses: actions/checkout@v3
+      with:
+        ref: ${{ github.event.pull_request.head.sha }}
+    - name: Checkout submodules
+      run: git submodule update --init --recursive qtag
+    - uses: actions/setup-python@v3
+      with:
+        python-version: '3.8'
+        cache: pip
+    - name: Install all dependencies
+      run: 'pip install poetry
+
+        poetry config virtualenvs.in-project true
+
+        poetry install
+
+        '
+    - name: Make unique names for this job
+      id: shell-command
+      run: 'SUFFIX=$(echo ${GITHUB_HEAD_REF} | sed "s/\./_/g" | sed "s/-/_/g" | sed
+        "s\/\_\g")_${GITHUB_RUN_ID}
+
+        echo "OPSCENTER_DATABASE=OPSCENTER_PR_$SUFFIX" >> $GITHUB_ENV
+
+        '
+    - name: Make snowsql config
+      env:
+        SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+        SNOWFLAKE_USERNAME: ${{ secrets.SNOWFLAKE_USERNAME }}
+        SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
+      run: 'mkdir $HOME/.snowsql
+
+        envsubst < deploy/opscenter.config > $HOME/.snowsql/config
+
+        '
+    - name: remove SQL objects
+      run: poetry run python deploy/cypress_teardown.py -p opscenter
   test-deploy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-      - name: Checkout submodules
-        run: git submodule update --init --recursive qtag
-      - uses: actions/setup-python@v3
-        with:
-          python-version: "3.8"
-          cache: "pip"
-      - name: install dependencies
-        run: |
-          pip install poetry
-          poetry config virtualenvs.in-project true
-          poetry install
-      - name: Describe installation
-        run: poetry show
-      - name: Get suffix
-        id: shell-command
-        run: echo SUFFIX=$(echo ${GITHUB_HEAD_REF} | sed "s/\./_/g" | sed "s/-/_/g" | sed "s\/\_\g")_${GITHUB_RUN_ID} >> $GITHUB_ENV
-      - name: set config
-        env:
-          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
-          SNOWFLAKE_USERNAME: ${{ secrets.SNOWFLAKE_USERNAME }}
-          SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
-          OPSCENTER_DATABASE: "DATABASE_CYPRESS_{{ env.SUFFIX }}"
-        run: |
-          mkdir $HOME/.snowsql
-          envsubst < deploy/opscenter.config > $HOME/.snowsql/config
-      - name: set env
-        run: |
-          echo "OPSCENTER_PACKAGE=PACKAGE_${SUFFIX}" >> "$GITHUB_ENV"
-          echo "OPSCENTER_DATABASE=\"DATABASE_${SUFFIX}\"" >> "$GITHUB_ENV"
-          echo "OPSCENTER_APP=APP_${SUFFIX}" >> "$GITHUB_ENV"
-      - name: run deploy
-        env:
-          OPSCENTER_PACKAGE: ${{env.OPSCENTER_PACKAGE}}
-          OPSCENTER_DATABASE: ${{env.OPSCENTER_DATABASE}}
-          OPSCENTER_APP: ${{env.OPSCENTER_APP}}
-          OPSCENTER_DROP_DATABASE: "true"
-        run: "poetry run python deploy/deploy.py --mock-sundeck-sharing --truncate-backfill"
-      - name: run teardown
-        run: "poetry run python deploy/pr_teardown.py -a ${OPSCENTER_APP}"
-      - name: run teardown
-        if: failure()
-        run: "poetry run python deploy/pr_teardown.py -a ${OPSCENTER_APP}"
+    - uses: actions/checkout@v3
+      with:
+        ref: ${{ github.event.pull_request.head.sha }}
+    - name: Checkout submodules
+      run: git submodule update --init --recursive qtag
+    - uses: actions/setup-python@v3
+      with:
+        python-version: '3.8'
+        cache: pip
+    - name: install dependencies
+      run: 'pip install poetry
+
+        poetry config virtualenvs.in-project true
+
+        poetry install
+
+        '
+    - name: Describe installation
+      run: poetry show
+    - name: Get suffix
+      id: shell-command
+      run: echo SUFFIX=$(echo ${GITHUB_HEAD_REF} | sed "s/\./_/g" | sed "s/-/_/g"
+        | sed "s\/\_\g")_${GITHUB_RUN_ID} >> $GITHUB_ENV
+    - name: set config
+      env:
+        SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+        SNOWFLAKE_USERNAME: ${{ secrets.SNOWFLAKE_USERNAME }}
+        SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
+        OPSCENTER_DATABASE: DATABASE_CYPRESS_{{ env.SUFFIX }}
+      run: 'mkdir $HOME/.snowsql
+
+        envsubst < deploy/opscenter.config > $HOME/.snowsql/config
+
+        '
+    - name: set env
+      run: 'echo "OPSCENTER_PACKAGE=PACKAGE_${SUFFIX}" >> "$GITHUB_ENV"
+
+        echo "OPSCENTER_DATABASE=\"DATABASE_${SUFFIX}\"" >> "$GITHUB_ENV"
+
+        echo "OPSCENTER_APP=APP_${SUFFIX}" >> "$GITHUB_ENV"
+
+        '
+    - name: run deploy
+      env:
+        OPSCENTER_PACKAGE: ${{env.OPSCENTER_PACKAGE}}
+        OPSCENTER_DATABASE: ${{env.OPSCENTER_DATABASE}}
+        OPSCENTER_APP: ${{env.OPSCENTER_APP}}
+        OPSCENTER_DROP_DATABASE: 'true'
+      run: poetry run python deploy/deploy.py --mock-sundeck-sharing --truncate-backfill
+    - name: run teardown
+      run: poetry run python deploy/pr_teardown.py -a ${OPSCENTER_APP}
+    - name: run teardown
+      if: failure()
+      run: poetry run python deploy/pr_teardown.py -a ${OPSCENTER_APP}
